@@ -1,0 +1,3 @@
+LanguageTool
+PyspellChecker
+LangDetect
