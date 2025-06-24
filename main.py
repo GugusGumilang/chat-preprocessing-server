@@ -6,27 +6,14 @@ from transformers import pipeline
 import subprocess
 import traceback
 import logging
-import fasttext
+import langid  # <-- ganti ke langid
 import os
-import requests
 
 logging.basicConfig(level=logging.INFO)
 
 app = FastAPI()
 
-# ⚡️ DOWNLOAD MODEL FASTTEXT JIKA BELUM ADA
-MODEL_URL = "https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.bin"
-MODEL_PATH = "lid.176.bin"
-
-if not os.path.exists(MODEL_PATH):
-    logging.warning(f"Model belum ditemukan, downloading from {MODEL_URL}...")
-    response = requests.get(MODEL_URL)
-    with open(MODEL_PATH, "wb") as f:
-        f.write(response.content())
-
-# ⚡️ INIT MODEL
-lang_model = fasttext.load_model(MODEL_PATH)
-
+# ⚡️ INIT SPACY MODEL
 try:
     nlp = spacy.load("en_core_web_sm")
 except OSError:
@@ -34,6 +21,7 @@ except OSError:
     subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
     nlp = spacy.load("en_core_web_sm")
 
+# ⚡️ INIT ERRANT & CORRECTOR
 annotator = errant.load("en")
 corrector = pipeline("text2text-generation", model="prithivida/grammar_error_correcter_v1")
 spell = SpellChecker()
@@ -136,6 +124,6 @@ async def error_handling(request: Request, call_next):
         return {"error": str(e)}
 
 def detect_language(text: str) -> str:
-    """Deteksi bahasa dengan fastText"""
-    lang = lang_model.predict(text.strip())[0][0].replace("__label__", "")
+    """Deteksi bahasa dengan langid."""
+    lang, _ = langid.classify(text)
     return lang
