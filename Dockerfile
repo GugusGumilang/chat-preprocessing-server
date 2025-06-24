@@ -1,23 +1,25 @@
-# 1️⃣ PILIH BASE IMAGE
+# =========================
+# 1️⃣ BASE IMAGE
+# =========================
 FROM python:3.12-slim
 
-# 2️⃣ Set kerja directory
-WORKDIR /app
-
-# 3️⃣ Install git
+# =========================
+# 2️⃣ Install Dependencies
+# =========================
 RUN apt-get update && apt-get install -y git
 
-# 4️⃣ Copy requirements
-COPY requirements.txt .
-
-# 5️⃣ Install dependencies
+# Install python dependencies
+COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 6️⃣ Copy kode app
-COPY . .
+# =========================
+# 3️⃣ Copy Source
+# =========================
+COPY . /app
+WORKDIR /app
 
-# 7️⃣ Expose port
-EXPOSE 8000
-
-# 8️⃣ Command untuk run app
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port $PORT"]
+# =========================
+# 4️⃣ Expose port & Default Command
+# =========================
+EXPOSE 8080
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
