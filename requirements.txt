@@ -5,4 +5,3 @@ errant @ git+https://github.com/chrisjbryant/errant.git
 transformers
 torch
 pyspellchecker
-langid

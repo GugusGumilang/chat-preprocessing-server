@@ -6,8 +6,7 @@ from transformers import pipeline
 import subprocess
 import traceback
 import logging
-import langid  # <-- ganti ke langid
-import os
+import re
 
 logging.basicConfig(level=logging.INFO)
 
@@ -125,5 +124,7 @@ async def error_handling(request: Request, call_next):
 
 def detect_language(text: str) -> str:
     """Deteksi bahasa dengan langid."""
-    lang, _ = langid.classify(text)
-    return lang
+    """Deteksi bahasa dengan pola kata bahasa Inggris."""
+    english_words = r"\b(the|we|they|he|she|may|who|whom|her|his|have|had|is|am|you|and|are|hello|good|thanks|how|what|where|why|when|i|me|your|from|to|at|on|in|it|for|of|a|an|do|does|did|can|should|would|will|won't|don't|can't|shouldn't|wouldn't|isn't|isnt|was|were|be|being|been)\b"
+    match = re.compile(english_words, re.IGNORECASE).search(text)
+    return "en" if match else "id"
