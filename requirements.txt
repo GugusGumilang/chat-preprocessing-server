@@ -1,4 +1,8 @@
 fastapi
 uvicorn
-pyspellchecker
 langdetect
+pyspellchecker
+spacy
+errant @ git+https://github.com/chrisjbryant/errant.git
+torch
+transformers
