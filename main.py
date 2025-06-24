@@ -4,11 +4,24 @@ from spellchecker import SpellChecker
 import spacy
 import errant
 from transformers import pipeline
+import subprocess
+import traceback
+import logging
+
+logging.basicConfig(level=logging.INFO)
 
 app = FastAPI()
 
 # ⚡️ Init Model
-nlp = spacy.load("en_core_web_sm")          
+
+# ✅ Load Model Secara Aman
+try:
+    nlp = spacy.load("en_core_web_sm")
+except OSError:
+    logging.warning("en_core_web_sm tidak ditemukan. Downloading...")
+    subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
+    nlp = spacy.load("en_core_web_sm")
+            
 annotator = errant.load("en")
 corrector = pipeline("text2text-generation", model="prithivida/grammar_error_correcter_v1")
 spell = SpellChecker()
@@ -122,3 +135,17 @@ def process_minimal(input_text: str = Body(...)):
         "detected_lang": lang,
         "results": results
     }
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+@app.middleware("http")
+async def error_handling(request, call_next):
+    try:
+        response = await call_next(request)
+        return response
+    except Exception as e:
+        traceback.print_exc()
+        return {"error": str(e)}
