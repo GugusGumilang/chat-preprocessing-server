@@ -1,13 +1,12 @@
 from fastapi import FastAPI, Body, Request
-from spellchecker import SpellChecker
 import spacy
 import errant
 from transformers import pipeline
 import subprocess
 import traceback
 import logging
+import time
 import re
-
 
 if __name__ == "__main__":
     import os
@@ -15,25 +14,23 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run("main:app", host="0.0.0.0", port=port)
 
-
 logging.basicConfig(level=logging.INFO)
 
 app = FastAPI()
 
-# ⚡️ INIT SPACY MODEL
+# ⚡️ INIT spaCy model
 try:
     nlp = spacy.load("en_core_web_sm")
 except OSError:
-    logging.warning("en_core_web_sm tidak ditemukan. Downloading...")
+    logging.warning("Model spaCy tidak ditemukan. Mendownload...")
     subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
     nlp = spacy.load("en_core_web_sm")
 
-# ⚡️ INIT ERRANT & CORRECTOR
+# ⚡️ INIT ERRANT & grammar corrector
 annotator = errant.load("en")
-corrector = pipeline("text2text-generation", model="prithivida/grammar_error_correcter_v1")
-spell = SpellChecker()
+corrector = pipeline("text2text-generation", model="prithivida/grammar_error_correcter_v1", device=-1)
 
-# ⚡️ MAP ERRANT ERROR
+# ⚡️ Map ERRANT tag to readable label
 error_mapping = {
     "R:VERB:TENSE": "Tenses",
     "R:VERB:FORM": "Verb Form",
@@ -70,43 +67,37 @@ error_mapping = {
     "U:OTHER": "Other Errors",
 }
 
-def map_error(tag): 
-    """Map ERRANT tag to human-readable category."""
+def map_error(tag: str) -> str:
     return error_mapping.get(tag, tag)
 
 @app.get("/")
 def root():
-    """Check if the server is up"""
-    return {"message": "Server is up"}
+    return {"message": "Server is running."}
 
 @app.get("/health")
 def health():
-    """Check server health"""
     return {"status": "ok"}
 
 @app.post("/process_minimal")
 def process_minimal(input_text: str = Body(...)):
-    """Return minimal output for GPT."""
-    lang = detect_language(input_text)
+    start_time = time.time()
 
+    lang = detect_language(input_text)
     if lang != "en":
-        return {
-            "detected_lang": lang,
-            "results": []
-        }
+        return {"detected_lang": lang, "results": []}
 
     results = []
-    for sent in list(nlp(input_text).sents):
-        # Typo Correction
-        words = sent.text.split()
-        corrected_words = [spell.correction(w) or w for w in words]
-        typo_corrected = " ".join(corrected_words)
 
-        # Grammar Correction
-        corrected = corrector(typo_corrected, num_return_sequences=1)[0]["generated_text"]
+    # ✅ Proses grammar correction seluruh kalimat
+    sentences = list(nlp(input_text).sents)
+    corrected_pairs = []
+    for sent in sentences:
+        corrected_text = corrector(sent.text, num_return_sequences=1)[0]["generated_text"]
+        corrected_pairs.append((sent.text, corrected_text))
 
-        # ERRANT Annotations
-        edits = annotator.annotate(nlp(sent.text), nlp(corrected))
+    # ✅ Lanjutkan ERRANT annotation
+    for orig, corrected in corrected_pairs:
+        edits = annotator.annotate(nlp(orig), nlp(corrected))
         results.append({
             "corrected": corrected,
             "errors": [
@@ -115,6 +106,9 @@ def process_minimal(input_text: str = Body(...)):
             ]
         })
 
+    duration = round(time.time() - start_time, 2)
+    logging.info(f"✅ Processing time: {duration}s")
+
     return {
         "detected_lang": lang,
         "results": results
@@ -122,17 +116,12 @@ def process_minimal(input_text: str = Body(...)):
 
 @app.middleware("http")
 async def error_handling(request: Request, call_next):
-    """Handle errors gracefully."""
     try:
-        response = await call_next(request)
-        return response
+        return await call_next(request)
     except Exception as e:
         traceback.print_exc()
         return {"error": str(e)}
 
 def detect_language(text: str) -> str:
-    """Deteksi bahasa dengan langid."""
-    """Deteksi bahasa dengan pola kata bahasa Inggris."""
-    english_words = r"\b(the|we|they|he|she|may|who|whom|her|his|have|had|is|am|you|and|are|hello|good|thanks|how|what|where|why|when|i|me|your|from|to|at|on|in|it|for|of|a|an|do|does|did|can|should|would|will|won't|don't|can't|shouldn't|wouldn't|isn't|isnt|was|were|be|being|been)\b"
-    match = re.compile(english_words, re.IGNORECASE).search(text)
-    return "en" if match else "id"
+    pattern = r"\b(the|we|they|he|she|may|who|whom|her|his|have|had|is|am|you|and|are|hello|good|thanks|how|what|where|why|when|i|me|your|from|to|at|on|in|it|for|of|a|an|do|does|did|can|should|would|will|won't|don't|can't|shouldn't|wouldn't|isn't|isnt|was|were|be|being|been)\b"
+    return "en" if re.search(pattern, text, re.IGNORECASE) else "id"
