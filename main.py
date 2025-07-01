@@ -65,6 +65,7 @@ error_mapping = {
     "R:OTHER": "Other Errors",
     "M:OTHER": "Other Errors",
     "U:OTHER": "Other Errors",
+    "R:RED": "Redundancy",
 }
 
 def map_error(tag: str) -> str:
@@ -88,22 +89,26 @@ def process_minimal(input_text: str = Body(...)):
 
     results = []
 
-    # ✅ Proses grammar correction seluruh kalimat
     sentences = list(nlp(input_text).sents)
     corrected_pairs = []
+
     for sent in sentences:
         corrected_text = corrector(sent.text, num_return_sequences=1)[0]["generated_text"]
         corrected_pairs.append((sent.text, corrected_text))
 
-    # ✅ Lanjutkan ERRANT annotation
-    for orig, corrected in corrected_pairs:
-        edits = annotator.annotate(nlp(orig), nlp(corrected))
+    for original, corrected in corrected_pairs:
+        edits = annotator.annotate(nlp(original), nlp(corrected))
+        errors = [
+            {
+                "original_error": e.o_str,
+                "category": map_error(e.type)
+            }
+            for e in edits
+        ]
         results.append({
+            "original": original,
             "corrected": corrected,
-            "errors": [
-                {"original_error": e.o_str, "category": map_error(e.type)}
-                for e in edits
-            ]
+            "errors": errors
         })
 
     duration = round(time.time() - start_time, 2)
